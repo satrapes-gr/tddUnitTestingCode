@@ -100,8 +100,8 @@ ifndef UNITY_WARNINGFLAGS
 endif
 
 # Default dir for temporary files (d, o)
-ifndef UNITY_TEST_OBJS_DIR
-    UNITY_TEST_OBJS_DIR = objs
+ifndef UNITY_TEST_OBJECTS_DIR
+    UNITY_TEST_OBJECTS_DIR = objs/test/unity
 endif
 
 # Default dir for the outout library
@@ -162,6 +162,7 @@ ifeq ($(UNITY_MAP_FILE), Y)
 endif
 
 #LD_LIBRARIES += -lgcov
+LINK.o = $(CPP_PLATFORM)
 
 TARGET_LIB = \
     $(UNITY_LIB_DIR)/lib$(COMPONENT_NAME).a
@@ -184,7 +185,7 @@ get_src_from_dir_list = $(foreach dir, $1, $(call get_src_from_dir,$(dir)))
 #@param file extension (e.g. .o, .d etc)
 #@param text to substitute
 #@return substitute .c/.cpp files with .o, .d file extension
-__src_to = $(subst .c,$1, $(subst .cpp,$1,$2))
+__src_to = $(subst .c,$1, $(subst .s,$1,$2))
 src_to = $(call __src_to,$1,$2)
 src_to_o = $(call src_to,.o,$1)
 src_to_d = $(call src_to,.d,$1)
@@ -198,24 +199,41 @@ debug_print_list = $(foreach word,$1,echo "  $(word)";) echo;
 #Derived
 STUFF_TO_CLEAN += $(TEST_TARGET) $(TEST_TARGET).exe $(TARGET_LIB) $(TARGET_MAP)
 
-SRC += $(call get_src_from_dir_list, $(SRC_DIRS)) $(SRC_FILES)			        
+SOURCE += $(shell find $(SOURCE_DIR) -name '*.[cs]')
 #$(warning SRC is $(SRC))
-OBJ2 = $(call make_dotdot_a_subdir. $(OBJ))
-#$(warning UNITY_TEST_SRC_DIRS is $(UNITY_TEST_SRC_DIRS))
-UNITY_TEST_SRC = $(call get_src_from_dir_list, $(UNITY_TEST_SRC_DIRS))
+OBJECTS := $(patsubst $(SOURCE_DIR)/%, $(OBJECTS_DIR)/%, $(call src_to_o, $(SOURCE)))
+#OBJECTS2 = $(call make_dotdot_a_subdir, $(OBJECTS))
+#$(warning UNITY_TEST_SOURCE_DIR is $(UNITY_TEST_SOURCE_DIR))
+ifndef UNITY_TEST_SOURCE_DIR
+	UNITY_TEST_SOURCE_DIR := src/test/unity
+endif
+
+ifndef UNITY_TEST_OBJECTS_DIR
+	UNITY_TEST_OBJECTS_DIR := objs/test/unity
+endif
+UNITY_TEST_SOURCE = $(shell find $(UNITY_TEST_SOURCE_DIR) -name '*.c')
 #$(warning UNITY_TEST_SRC is $(UNITY_TEST_SRC))
 #UNITY_TEST_OBJS = $(call src_to_o,$(UNITY_TEST_SRC))
 #$(warning UNITY_TEST_OBJS is $(UNITY_TEST_OBJS))
 
-UNITY_TEST_OBJS = $(call src_to_o,$(UNITY_TEST_SRC))
-STUFF_TO_CLEAN += $(UNITY_TEST_OBJS)
+UNITY_TEST_OBJECTS = $(patsubst $(UNITY_TEST_SOURCE_DIR)/%, $(UNITY_TEST_OBJECTS_DIR)/%, $(call src_to_o, $(UNITY_TEST_SOURCE)))
+
+UNITY_TEST_ORIGINAL = $(shell find $(UNITY_TEST_SOURCE_DIR) -name '*.c')
+ 
+
+#$(warning UNITY_TEST_OBJECTS IS $(UNITY_TEST_OBJECTS))
+#$(warning UNITY_TEST_SOURCE IS $(UNITY_TEST_SOURCE))
+#$(warning UNITY_TEST_OBJECTS_DIR IS $(UNITY_TEST_OBJECTS_DIR))
+#$(warning UNITY_TEST_SOURCE_DIR IS $(UNITY_TEST_SOURCE_DIR))
+
+STUFF_TO_CLEAN += $(UNITY_TEST_OBJECTS)
 
 
 MOCKS_SRC = $(call get_src_from_dir_list, $(MOCKS_SRC_DIRS))
 MOCKS_OBJS = $(call src_to_o,$(MOCKS_SRC))
 STUFF_TO_CLEAN += $(MOCKS_OBJS)
 
-ALL_SRC = $(SRC) $(UNITY_TEST_SRC) $(MOCKS_SRC)
+ALL_SRC = $(SRC) $(UNITY_TEST_SOURCE) $(MOCKS_SRC)
 
 #Test coverage with gcov
 GCOV_OUTPUT = gcov_output.txt
@@ -225,7 +243,7 @@ GCOV_GCDA_FILES = $(call src_to_gcda, $(ALL_SRC))
 GCOV_GCNO_FILES = $(call src_to_gcno, $(ALL_SRC))
 TEST_OUTPUT = $(TEST_TARGET).txt
 STUFF_TO_CLEAN += \
-	$(GCOV_OUTPUT)INCLUDE_DIRS\
+	$(GCOV_OUTPUT)INCLUDE_DIR\
 	$(GCOV_REPORT)\
 	$(GCOV_REPORT).html\
 	$(GCOV_ERROR)\
@@ -239,8 +257,8 @@ STUFF_TO_CLEAN += \
 GCOV_CLEAN = $(SILENCE)rm -f $(GCOV_GCDA_FILES) $(GCOV_OUTPUT) $(GCOV_REPORT) $(GCOV_ERROR)
 RUN_TEST_TARGET = $(SILENCE)  $(GCOV_CLEAN) ; echo "Running $(TEST_TARGET)"; ./$(TEST_TARGET) $(UNITY_TEST_RUNNER_FLAGS)
 #$(warning INCLUDE_DIRS is $(INCLUDE_DIRS))
-INCLUDES_DIRS_EXPANDED = $(call get_dirs_from_dirspec, $(INCLUDE_DIRS))
-INCLUDES += $(foreach dir, $(INCLUDES_DIRS_EXPANDED), -I$(dir))
+INCLUDES_DIR_EXPANDED = $(call get_dirs_from_dirspec, $(INCLUDE_DIR))
+INCLUDES += $(foreach dir, $(INCLUDES_DIR_EXPANDED), -I$(dir))
 MOCK_DIRS_EXPANDED = $(call get_dirs_from_dirspec, $(MOCKS_SRC_DIRS))
 INCLUDES += $(foreach dir, $(MOCK_DIRS_EXPANDED), -I$(dir))
 
@@ -278,14 +296,15 @@ flags:
 	@echo "Create libraries with ARFLAGS:"
 	@$(call debug_print_list,$(ARFLAGS))
 	@echo "OBJ files:"
-	@$(call debug_print_list,$(OBJ2))
+	@$(call debug_print_list,$(OBJECTS))
 	
 	
-$(TEST_TARGET): $(UNITY_TEST_OBJS) $(MOCKS_OBJS)  $(PRODUCTION_CODE_START) $(TARGET_LIB) $(USER_LIBS) $(PRODUCTION_CODE_END) $(STDLIB_CODE_START) 
+$(TEST_TARGET): $(UNITY_TEST_OBJECTS) $(MOCKS_OBJS)  $(PRODUCTION_CODE_START) $(TARGET_LIB) $(USER_LIBS) $(PRODUCTION_CODE_END) $(STDLIB_CODE_START)  /home/satrapes/embedded/projects/tddUnitTestingCode/code/unity.framework/extras/fixture/src/unity_fixture.o
 	$(SILENCE)echo Linking $@
-	$(SILENCE)$(LINK.o) -o $@ $^ $(LD_LIBRARIES)
+###	$(warning LINK.o $(LINK.o) $(UNITY_TEST_OBJECTS))
+	$(SILENCE)$(LINK.o) --specs=rdimon.specs -Wl,--start-group -lrdimon -lgcc -lc -lm -Wl,--end-group -I. -o $@ $^ $(LD_LIBRARIES) 
 
-$(TARGET_LIB): $(OBJ)
+$(TARGET_LIB): $(OBJECTS)
 	$(SILENCE)echo Building archive $@
 	$(SILENCE)mkdir -p lib
 	$(SILENCE)$(AR) $(ARFLAGS) $@ $^
@@ -297,17 +316,26 @@ test: $(TEST_TARGET)
 vtest: $(TEST_TARGET)
 	$(RUN_TEST_TARGET) -v  | tee $(TEST_OUTPUT)
 
-#$(UNITY_OBJS_DIR)/%.o: %.cpp
+#$(UNITY_TEST_OBJECTS_DIR)/%.o: %.cpp
 #	@echo compiling $(notdir $<)
 #	$(SILENCE)mkdir -p $(dir $@)
 #	$(SILENCE)$(COMPILE.cpp) -MMD -MP $(OUTPUT_OPTION) $<
 #$(warning BATMAN1)
 #$(warning UNITY_TEST_SRC $(UNITY_TEST_SRC))
-$(UNITY_TEST_OBJS_DIR)/%.o: $(UNITY_TEST_SRC)/%.c
+$(UNITY_TEST_OBJECTS_DIR)/%.o: $(UNITY_TEST_SOURCE_DIR)/%.c
 	@echo compiling $(notdir $<)
-#	$(warning BATMAN2)
-	$(SILENCE)mkdir -p $(dir $@)
-	$(SILENCE)$(CPP_PLATFORM) -MMD -MP  $(OUTPUT_OPTION) $<
+	$(SILENCE)mkdir -p $(@D)
+###	$(warning INCLUDE_DIR IS  $(addprefix -I, $(UNITY_TEST_INCLUDE_DIR)))
+###	$(warning INCLUDE_DIR is $(INCLUDE_DIR) $(shell pwd))
+	$(SILENCE)$(CPP_PLATFORM) -MMD -MP $(addprefix -I, $(UNITY_TEST_INCLUDE_DIR)) $(addprefix -I, $(INCLUDE_DIR)) -DSTM32F401xE -c $< -o $@
+
+$(UNITY_TEST_OBJECTS_DIR)/%.o: $(UNITY_TEST_ORIGINAL_DIR)/%.c
+	@echo compiling $(notdir $<)
+	$(SILENCE)mkdir -p $(@D)
+###	$(warning INCLUDE_DIR IS  $(addprefix -I, $(UNITY_TEST_INCLUDE_DIR)))
+###	$(warning INCLUDE_DIR is $(INCLUDE_DIR) $(shell pwd))
+	$(SILENCE)$(CPP_PLATFORM) -MMD -MP $(addprefix -I, $(UNITY_TEST_INCLUDE_DIR)) $(addprefix -I, $(INCLUDE_DIR)) -DSTM32F401xE -c $< -o $@
+
 
 ifneq "$(MAKECMDGOALS)" "clean"
 -include $(DEP_FILES)
@@ -317,7 +345,7 @@ endif
 clean:
 	$(SILENCE)echo Making clean
 	$(SILENCE)$(RM) $(STUFF_TO_CLEAN)
-	$(SILENCE)rm -rf gcov $(UNITY_TEST_OBJS_DIR)
+	$(SILENCE)rm -rf gcov $(UNITY_TEST_OBJECTS_DIR)
 	$(SILENCE)find . -name "*.gcno" | xargs rm -f
 	$(SILENCE)find . -name "*.gcda" | xargs rm -f
 	
@@ -330,11 +358,11 @@ realclean: clean
 	$(SILENCE)find . -name "*.[do]" | xargs rm -f	
 
 gcov: test
-	$(SILENCE)for d in $(SRC_DIRS) ; do \
-		gcov --object-directory $(UNITY_TEST_OBJS_DIR)/$$d $$d/*.c $$d/*.cpp >> $(GCOV_OUTPUT) 2>>$(GCOV_ERROR) ; \
+	$(SILENCE)for d in $(SOURCE_DIR) ; do \
+		gcov --object-directory $(UNITY_TEST_OBJECTS_DIR)/$$d $$d/*.c $$d/*.cpp >> $(GCOV_OUTPUT) 2>>$(GCOV_ERROR) ; \
 	done
 	$(SILENCE)for f in $(SRC_FILES) ; do \
-		gcov --object-directory $(UNITY_TEST_OBJS_DIR)/$$f $$f >> $(GCOV_OUTPUT) 2>>$(GCOV_ERROR) ; \
+		gcov --object-directory $(UNITY_TEST_OBJECTS_DIR)/$$f $$f >> $(GCOV_OUTPUT) 2>>$(GCOV_ERROR) ; \
 	done
 	$(UNITY_BUILD_HOME)/filterGcov.sh $(GCOV_OUTPUT) $(GCOV_ERROR) $(GCOV_REPORT) $(TEST_OUTPUT)
 	$(SILENCE)cat $(GCOV_REPORT)
@@ -346,13 +374,15 @@ gcov: test
 debug:
 	@echo
 	@echo "Target Source files:"
-	@$(call debug_print_list,$(SRC))
+	@$(call debug_print_list,$(SOURCE))
 	@echo "Target Object files:"
-	@$(call debug_print_list,$(OBJ))
+	@$(call debug_print_list,$(OBJECTS))
 	@echo "Test Source files:"
-	@$(call debug_print_list,$(UNITY_TEST_SRC))
+	@$(call debug_print_list,$(UNITY_TEST_SOURCE))
 	@echo "Test Object files:"
-	@$(call debug_print_list,$(UNITY_TEST_OBJS))
+	@$(call debug_print_list,$(UNITY_TEST_OBJECTS))
+	@echo "Test Original files"
+	@$(call debug_print_list,$(UNITY_TEST_ORIGINAL))
 	@echo "Mock Source files:"
 	@$(call debug_print_list,$(MOCKS_SRC))
 	@echo "Mock Object files:"
@@ -364,9 +394,9 @@ debug:
 	@echo Includes:
 	@$(call debug_print_list,$(INCLUDES))
 
+
 ifneq "$(OTHER_MAKEFILE_TO_INCLUDE)" ""
 -include $(OTHER_MAKEFILE_TO_INCLUDE)
 endif
 
-	
 	
